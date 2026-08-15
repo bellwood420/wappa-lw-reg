@@ -1,0 +1,70 @@
+# ============================================================
+# Wappa LW Register
+# DE10-Nano / Cyclone V SoC
+# ============================================================
+
+set_global_assignment -name LAST_QUARTUS_VERSION "17.0.2 Lite Edition"
+
+# ------------------------------------------------------------
+# Device
+# ------------------------------------------------------------
+
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name DEVICE 5CSEBA6U23I7
+set_global_assignment -name TOP_LEVEL_ENTITY wappa_top
+
+
+# ------------------------------------------------------------
+# Sources
+# ------------------------------------------------------------
+
+set_global_assignment -name SYSTEMVERILOG_FILE wappa_top.sv
+set_global_assignment -name SYSTEMVERILOG_FILE wappa_axi_reg.sv
+set_global_assignment -name SDC_FILE wappa_lw_reg.sdc
+
+
+# ------------------------------------------------------------
+# HPS Lightweight HPS-to-FPGA interface
+# ------------------------------------------------------------
+
+set_instance_assignment -name HPS_LOCATION HPSINTERFACEHPS2FPGALIGHTWEIGHT_X52_Y43_N111 -entity wappa_axi_reg -to hps2fpga_light_weight
+
+# ------------------------------------------------------------
+# FPGA fabric clock
+#
+# DE10-Nano FPGA_CLK1_50
+#   Package pin : V11
+#   Frequency   : 50 MHz
+# ------------------------------------------------------------
+
+set_location_assignment PIN_V11 -to FPGA_CLK1_50
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to FPGA_CLK1_50
+
+
+# ------------------------------------------------------------
+# Unused-pin safety
+#
+# MiSTer expansion boards are physically attached.
+# All unused FPGA pins must remain high-impedance inputs.
+# ------------------------------------------------------------
+
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED"
+
+
+# ------------------------------------------------------------
+# Output
+# ------------------------------------------------------------
+
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name GENERATE_RBF_FILE ON
+
+
+# ------------------------------------------------------------
+# Quartus root partition
+# ------------------------------------------------------------
+
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

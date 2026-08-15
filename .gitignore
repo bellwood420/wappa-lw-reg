@@ -1,0 +1,41 @@
+# Quartus generated databases
+/db/
+/incremental_db/
+
+# Quartus build output
+/output_files/
+
+# Quartus temporary / generated files
+*.qws
+*.smsg
+*.summary
+*.rpt
+*.pin
+*.jdi
+*.sof
+*.pof
+*.rbf
+*.rpd
+*.ttf
+*.done
+*.qdf
+
+# Simulation / generated IP output
+/simulation/
+/greybox_tmp/
+
+# Legacy Qsys / Platform Designer generated tree.
+# Not part of the active direct-HPS design.
+/wappa_soc/
+
+# Programmer / local machine state
+*.cdf
+*.stp
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*~
+*.swp
