@@ -3,9 +3,10 @@
 // Minimal direct AXI3 slave for the Cyclone V Lightweight HPS-to-FPGA bridge.
 //
 // No Qsys / Platform Designer interconnect is used.
-// The only implemented slave register is:
+// The only implemented slave registers are:
 //
 //   HPS physical address 0xFF200000  <->  reg0[31:0]
+//   HPS physical address 0xFF200004  <->  reg1[31:0]
 //
 // Intended access:
 //   devmem 0xFF200000 32
@@ -67,10 +68,11 @@ module wappa_axi_reg (
 
 
     // ------------------------------------------------------------------------
-    // The one Wappa register
+    // The two Wappa registers
     // ------------------------------------------------------------------------
 
     reg [31:0] reg0 = 32'b0;
+    reg [31:0] reg1 = 32'b0;
 
 
     // ------------------------------------------------------------------------
@@ -82,6 +84,7 @@ module wappa_axi_reg (
 
     reg        aw_pending = 1'b0;
     reg [11:0] awid_hold  = 12'b0;
+    reg [20:0] awaddr_hold = 21'b0;
     reg        aw_bad     = 1'b0;
 
     reg        w_pending  = 1'b0;
@@ -98,9 +101,10 @@ module wappa_axi_reg (
         if (awvalid && awready) begin
             aw_pending <= 1'b1;
             awid_hold  <= awid;
+            awaddr_hold <= awaddr;
 
-            // Only address 0, one beat, 32-bit transfer is implemented.
-            aw_bad <= (awaddr[20:2] != 19'b0) ||
+            // Only address 0 and 4, one beat, 32-bit transfer is implemented.
+            aw_bad <= (awaddr != 21'h0 && awaddr != 21'h4) ||
                       (awlen          != 4'b0000) ||
                       (awsize         != 3'b010);
         end
@@ -123,10 +127,17 @@ module wappa_axi_reg (
             end
             else begin
                 // Apply AXI byte strobes.
-                if (wstrb_hold[0]) reg0[ 7: 0] <= wdata_hold[ 7: 0];
-                if (wstrb_hold[1]) reg0[15: 8] <= wdata_hold[15: 8];
-                if (wstrb_hold[2]) reg0[23:16] <= wdata_hold[23:16];
-                if (wstrb_hold[3]) reg0[31:24] <= wdata_hold[31:24];
+                if (awaddr_hold == 21'h0) begin
+                    if (wstrb_hold[0]) reg0[ 7: 0] <= wdata_hold[ 7: 0];
+                    if (wstrb_hold[1]) reg0[15: 8] <= wdata_hold[15: 8];
+                    if (wstrb_hold[2]) reg0[23:16] <= wdata_hold[23:16];
+                    if (wstrb_hold[3]) reg0[31:24] <= wdata_hold[31:24];
+                end else begin
+                    if (wstrb_hold[0]) reg1[ 7: 0] <= wdata_hold[ 7: 0];
+                    if (wstrb_hold[1]) reg1[15: 8] <= wdata_hold[15: 8];
+                    if (wstrb_hold[2]) reg1[23:16] <= wdata_hold[23:16];
+                    if (wstrb_hold[3]) reg1[31:24] <= wdata_hold[31:24];
+                end
 
                 // OKAY
                 bresp <= 2'b00;
@@ -150,7 +161,7 @@ module wappa_axi_reg (
             rid   <= arid;
             rlast <= 1'b1;
 
-            if ((araddr[20:2] != 19'b0) ||
+            if ((araddr != 21'h0 && araddr != 21'h4) ||
                 (arlen         != 4'b0000) ||
                 (arsize        != 3'b010)) begin
 
@@ -160,7 +171,10 @@ module wappa_axi_reg (
                 rresp <= 2'b10;
             end
             else begin
-                rdata <= reg0;
+                if (araddr == 21'h0)
+                    rdata <= reg0;
+                else
+                    rdata <= reg1;
 
                 // OKAY
                 rresp <= 2'b00;

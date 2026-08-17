@@ -10,12 +10,12 @@ The Cyclone V hard Lightweight HPS-to-FPGA AXI interface is instantiated
 directly from SystemVerilog, in the same spirit as MiSTer-style direct HPS
 primitive use.
 
-The current design implements one 32-bit FPGA register:
+The current design implements two 32-bit FPGA registers:
 
 ```text
 ARM Cortex-A9
     |
-    | physical 0xFF200000
+    | physical 0xFF200000 / 0xFF200004
     v
 Cyclone V Lightweight HPS-to-FPGA bridge
     |
@@ -25,15 +25,21 @@ cyclonev_hps_interface_hps2fpga_light_weight
     v
 wappa_axi_reg.sv
     |
-    v
-reg0[31:0]
+    +-- local 0x000000 -> reg0[31:0]
+    |
+    `-- local 0x000004 -> reg1[31:0]
 ```
 
-A real DE10-Nano test has successfully written and read back:
+A real DE10-Nano test has successfully written and read back independent
+values from both registers:
 
 ```text
-0xDEADBEEF
+reg0 = 0xDEADBEEF
+reg1 = 0x12345678
 ```
+
+An access to the next unimplemented word at `0xFF200008` was also verified to
+fail with `Bus error`.
 
 ---
 
@@ -77,14 +83,17 @@ Contains:
 - direct instantiation of
   `cyclonev_hps_interface_hps2fpga_light_weight`
 - a minimal AXI3 slave
-- one 32-bit register, `reg0`
+- two 32-bit registers, `reg0` and `reg1`
 - byte-write support through AXI `WSTRB`
 - single-beat, 32-bit transfers only
+- separate capture of the AXI write-address and write-data channels
+- write-address holding through `awaddr_hold` until both AW and W have arrived
 
 For this experiment:
 
 ```text
-HPS physical address 0xFF200000 <-> reg0
+HPS physical address 0xFF200000 <-> local 0x000000 <-> reg0
+HPS physical address 0xFF200004 <-> local 0x000004 <-> reg1
 ```
 
 No Qsys-generated PIO, Merlin interconnect, router, mux, demux, burst adapter,
@@ -218,34 +227,67 @@ The Cyclone V L3 remap register used here is write-only.
 
 ---
 
+## Register map
+
+The Lightweight HPS-to-FPGA window is byte-addressed. The two 32-bit registers
+therefore occupy consecutive 4-byte-aligned addresses:
+
+| HPS physical address | Local AXI address | Register |
+|---|---|---|
+| `0xFF200000` | `0x000000` | `reg0[31:0]` |
+| `0xFF200004` | `0x000004` | `reg1[31:0]` |
+
+The next 32-bit word at local address `0x000008` is not implemented.
+
+---
+
 ## Register test
 
-Read the FPGA register:
+Immediately after FPGA configuration, both implemented registers read as zero:
 
 ```sh
 devmem 0xFF200000 32
-```
-
-Immediately after FPGA configuration, the expected value is:
-
-```text
-0x00000000
-```
-
-Write and read back:
-
-```sh
-devmem 0xFF200000 32 0xDEADBEEF
-devmem 0xFF200000 32
+devmem 0xFF200004 32
 ```
 
 Expected result:
 
 ```text
-0xDEADBEEF
+0x00000000
+0x00000000
 ```
 
-This path has been verified on real hardware.
+The first unimplemented 32-bit word is rejected:
+
+```sh
+devmem 0xFF200008 32
+```
+
+Observed result on the DE10-Nano:
+
+```text
+Bus error
+```
+
+Write independent values to both implemented registers:
+
+```sh
+devmem 0xFF200000 32 0xDEADBEEF
+devmem 0xFF200000 32
+
+devmem 0xFF200004 32 0x12345678
+devmem 0xFF200004 32
+```
+
+Observed results:
+
+```text
+0xDEADBEEF
+0x12345678
+```
+
+This two-register address decode and independent write/readback path has been
+verified on real hardware.
 
 ---
 
@@ -260,10 +302,10 @@ Correct order:
 1. Load a valid SOF
 2. Release the Lightweight bridge reset
 3. Enable the L3 remap
-4. Access 0xFF200000
+4. Access the implemented FPGA register addresses
 ```
 
-A real negative test was also performed:
+A real negative test was also performed on the earlier one-register version:
 
 ```text
 power cycle
@@ -311,8 +353,8 @@ hard interface:
 cyclonev_hps_interface_hps2fpga_light_weight
 ```
 
-The minimal 32-bit register therefore does not depend on a generated Qsys
-system.
+The minimal two-register AXI slave therefore does not depend on a generated
+Qsys system.
 
 Quartus still provides knowledge of the Cyclone V hard primitive itself; that
 is part of targeting this FPGA device, not a generated interconnect subsystem.
@@ -328,11 +370,13 @@ The slave currently assumes:
 
 - 32-bit transfers
 - one beat per transaction
-- one register at local address zero
+- two registers at local addresses `0x000000` and `0x000004`
 - no multiple outstanding transactions
 - no burst support beyond rejecting unsupported requests
 - `OKAY` for valid accesses
-- `SLVERR` for unsupported access shapes
+- `SLVERR` for unsupported addresses or access shapes
+- AXI AW and W channels may arrive independently; the accepted write address
+  is held internally until the write data has also arrived
 
 That is sufficient for the current `devmem` experiment and keeps the complete
 HPS-to-FPGA path understandable.
@@ -346,12 +390,20 @@ Verified on DE10-Nano:
 ```text
 Linux userspace
 -> /dev/mem
--> 0xFF200000
+-> 0xFF200000 / 0xFF200004
 -> Lightweight HPS-to-FPGA bridge
 -> direct Cyclone V hard AXI interface
 -> wappa_axi_reg
--> reg0
--> write/readback 0xDEADBEEF
+-> reg0 / reg1
+-> independent write/readback
+   reg0 = 0xDEADBEEF
+   reg1 = 0x12345678
+```
+
+Also verified:
+
+```text
+0xFF200008 -> unsupported local address -> SLVERR -> Bus error
 ```
 
 **Qsys / Platform Designer generated RTL is not required for this minimal
